@@ -16,11 +16,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
-COPY requirements_infer.txt .
+COPY requirements.txt .
 
 # 安装 Python 依赖
 # 使用清华源加速，--no-cache-dir 减小体积
-RUN pip install --no-cache-dir -r requirements_infer.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 复制项目文件
 COPY . .
