@@ -11,6 +11,8 @@ ENV LANG=C.UTF-8
 # 安装系统级依赖 (OpenCC 需要编译工具，ffmpeg 用于音频处理)
 # 注意：如果基础镜像很简陋，可能需要安装 build-essential
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
     ffmpeg \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*

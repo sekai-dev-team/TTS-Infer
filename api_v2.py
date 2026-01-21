@@ -145,6 +145,49 @@ if config_path in [None, ""]:
     config_path = "GPT-SoVITS/configs/tts_infer.yaml"
 
 tts_config = TTS_Config(config_path)
+
+# --- Auto-load models from Docker volume paths if not found in config ---
+def scan_and_update_model_path(config_path_attr, search_dir, extensions, config_obj):
+    current_path = getattr(config_obj, config_path_attr)
+    if current_path and os.path.exists(current_path):
+        return
+
+    # If configured path doesn't exist, search in the specific directory
+    if os.path.exists(search_dir):
+        for root, _, files in os.walk(search_dir):
+            for file in files:
+                if any(file.endswith(ext) for ext in extensions):
+                    found_path = os.path.join(root, file)
+                    print(f"Auto-detected model weight: {found_path}")
+                    setattr(config_obj, config_path_attr, found_path)
+                    return
+    
+    # Check default pretrained models as fallback
+    pretrained_dir = "GPT_SoVITS/pretrained_models"
+    if os.path.exists(pretrained_dir) and (not current_path or not os.path.exists(current_path)):
+         for root, _, files in os.walk(pretrained_dir):
+            for file in files:
+                if any(file.endswith(ext) for ext in extensions):
+                    # Prefer models that match specific patterns if needed, otherwise take first
+                    if "s1bert" in file and config_path_attr == "t2s_weights_path": # Basic filter for base GPT
+                         found_path = os.path.join(root, file)
+                         setattr(config_obj, config_path_attr, found_path)
+                         return
+                    if "s2G" in file and config_path_attr == "vits_weights_path": # Basic filter for base SoVITS
+                         found_path = os.path.join(root, file)
+                         setattr(config_obj, config_path_attr, found_path)
+                         return
+
+# Docker volume paths
+docker_gpt_dir = "/app/gpt_weights"
+docker_sovits_dir = "/app/sovits_weights"
+# Local paths for testing/compatibility
+local_gpt_dir = "gpt_weights"
+local_sovits_dir = "sovits_weights"
+
+scan_and_update_model_path("t2s_weights_path", docker_gpt_dir if os.path.exists(docker_gpt_dir) else local_gpt_dir, [".ckpt"], tts_config)
+scan_and_update_model_path("vits_weights_path", docker_sovits_dir if os.path.exists(docker_sovits_dir) else local_sovits_dir, [".pth"], tts_config)
+
 print(tts_config)
 tts_pipeline = TTS(tts_config)
 
@@ -309,7 +352,40 @@ def check_params(req: dict):
     streaming_mode: bool = req.get("streaming_mode", False)
     media_type: str = req.get("media_type", "wav")
     prompt_lang: str = req.get("prompt_lang", "")
+    prompt_text: str = req.get("prompt_text", "")
     text_split_method: str = req.get("text_split_method", "cut5")
+
+    # Resolve ref_audio_path
+    if ref_audio_path and not os.path.exists(ref_audio_path):
+        # Try finding in Docker/local volume
+        docker_ref_dir = "/app/ref_audio"
+        local_ref_dir = "ref_audios"
+        search_dir = docker_ref_dir if os.path.exists(docker_ref_dir) else local_ref_dir
+        potential_path = os.path.join(search_dir, ref_audio_path)
+        if os.path.exists(potential_path):
+            ref_audio_path = potential_path
+            req["ref_audio_path"] = ref_audio_path # Update in request
+        elif os.path.exists(search_dir) and not ref_audio_path:
+             # Randomly pick one if empty? No, better error out or let logic below handle empty
+             pass
+
+    # Auto-parse prompt_text and prompt_lang from filename if missing
+    if ref_audio_path and os.path.exists(ref_audio_path) and (not prompt_text or not prompt_lang):
+        filename = os.path.basename(ref_audio_path)
+        name_without_ext = os.path.splitext(filename)[0]
+        parts = name_without_ext.split("_")
+        if len(parts) >= 2:
+            auto_lang = parts[-1]
+            auto_text = "_".join(parts[:-1])
+            # Mapping common language codes if needed, or assume standard codes
+            if not prompt_lang:
+                prompt_lang = auto_lang
+                req["prompt_lang"] = prompt_lang
+                print(f"Auto-detected prompt_lang: {prompt_lang}")
+            if not prompt_text:
+                prompt_text = auto_text
+                req["prompt_text"] = prompt_text
+                print(f"Auto-detected prompt_text: {prompt_text}")
 
     if ref_audio_path in [None, ""]:
         return JSONResponse(status_code=400, content={"message": "ref_audio_path is required"})
