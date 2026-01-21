@@ -18,17 +18,21 @@ services:
               capabilities: [gpu]
     volumes:
       # 1. 挂载基础预训练模型 (BERT 等)
-      # 请确保宿主机该目录下有 s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt 等文件
-      - ./:/app/GPT_SoVITS/pretrained_models
+      # 宿主机路径应指向包含 cnhubert, bert 等模型的目录
+      - ./GPT_SoVITS/pretrained_models:/app/GPT_SoVITS/pretrained_models
       
       # 2. 挂载微调后的模型
       # 存放您的 .ckpt (GPT) 和 .pth (SoVITS) 文件
-      - ./gpt_models:/app/gpt_weights
-      - ./sovits_models:/app/sovits_weights
+      - ./gpt_weights:/app/gpt_weights
+      - ./sovits_weights:/app/sovits_weights
       
       # 3. 挂载参考音频 (Ref Audio)
       # 存放 miku_ref.wav 等
       - ./ref_audios:/app/ref_audio
+      
+      # 4. 挂载配置文件 (可选)
+      # 如果需要覆盖默认配置，取消注释并确保文件存在
+      - ./configs/tts_infer.yaml:/app/GPT_SoVITS/configs/tts_infer.yaml
     environment:
       # 如果需要调整显存分配策略，可在此添加 PyTorch 环境变量
       - CUDA_VISIBLE_DEVICES=0
