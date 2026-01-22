@@ -125,6 +125,7 @@ from GPT_SoVITS.TTS_infer_pack.TTS import TTS, TTS_Config
 from GPT_SoVITS.TTS_infer_pack.text_segmentation_method import get_method_names as get_cut_method_names
 from pydantic import BaseModel
 import threading
+import uuid
 
 # print(sys.path)
 i18n = I18nAuto()
@@ -493,16 +494,32 @@ async def tts_handle(req: dict):
     try:
         tts_generator = tts_pipeline.run(req)
 
+        # Output directory and filename components
+        output_folder = "output"
+        os.makedirs(output_folder, exist_ok=True)
+        timestamp = int(time.time()) # Assuming time is imported by start of script, as it is in original
+        unique_id = uuid.uuid4().hex[:6]
+        import time as time_module # Re-import locally to be safe if global import is missing in context, though file has 'import time'
+
         if streaming_mode:
 
             def streaming_generator(tts_generator: Generator, media_type: str):
-                if_frist_chunk = True
-                for sr, chunk in tts_generator:
-                    if if_frist_chunk and media_type == "wav":
-                        yield wave_header_chunk(sample_rate=sr)
-                        media_type = "raw"
-                        if_frist_chunk = False
-                    yield pack_audio(BytesIO(), chunk, sr, media_type).getvalue()
+                save_path = os.path.join(output_folder, f"tts_stream_{timestamp}_{unique_id}.{media_type if media_type != 'raw' else 'wav'}")
+                print(f"Saving stream to {save_path}")
+                
+                with open(save_path, "wb") as f_save:
+                    if_frist_chunk = True
+                    for sr, chunk in tts_generator:
+                        if if_frist_chunk and media_type == "wav":
+                            header = wave_header_chunk(sample_rate=sr)
+                            f_save.write(header)
+                            yield header
+                            media_type = "raw"
+                            if_frist_chunk = False
+                        
+                        data = pack_audio(BytesIO(), chunk, sr, media_type).getvalue()
+                        f_save.write(data)
+                        yield data
 
             # _media_type = f"audio/{media_type}" if not (streaming_mode and media_type in ["wav", "raw"]) else f"audio/x-{media_type}"
             return StreamingResponse(
@@ -516,6 +533,12 @@ async def tts_handle(req: dict):
         else:
             sr, audio_data = next(tts_generator)
             audio_data = pack_audio(BytesIO(), audio_data, sr, media_type).getvalue()
+
+            save_path = os.path.join(output_folder, f"tts_{timestamp}_{unique_id}.{media_type}")
+            with open(save_path, "wb") as f:
+                f.write(audio_data)
+            print(f"Audio saved to: {save_path}")
+
             return Response(audio_data, media_type=f"audio/{media_type}")
     except Exception as e:
         return JSONResponse(status_code=400, content={"message": "tts failed", "Exception": str(e)})
