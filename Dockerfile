@@ -12,7 +12,7 @@ ENV TZ=Asia/Shanghai
 ENV LANG=C.UTF-8
 
 # 根据构建参数决定是否替换为清华源
-RUN if [ "$USE_MIRROR" = "true" ]; then \
+RUN if [ "$USE_MIRROR" = "false" ]; then \
         sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
         sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list; \
     fi
@@ -33,7 +33,8 @@ COPY requirements.txt .
 # 1. 强制 opencc 从源码编译，解决 Linux GLIBC 版本不兼容问题
 # 2. 使用清华源加速
 # 3. 清理缓存减小体积
-RUN pip install --no-cache-dir --no-binary opencc -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+# RUN pip install --no-cache-dir --no-binary opencc -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+RUN pip install --no-cache-dir --no-binary opencc -r requirements.txt \
     && pip cache purge
 
 # 复制项目文件
