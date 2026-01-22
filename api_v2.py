@@ -104,6 +104,7 @@ RESP:
 import os
 import sys
 import traceback
+import time
 from typing import Generator, Union
 
 now_dir = os.getcwd()
@@ -147,34 +148,34 @@ if config_path in [None, ""]:
 
 tts_config = TTS_Config(config_path)
 
-# --- Auto-load models from Docker volume paths if not found in config ---
+# --- Auto-load models from Docker volume paths ---
 def scan_and_update_model_path(config_path_attr, search_dir, extensions, config_obj):
-    current_path = getattr(config_obj, config_path_attr)
-    if current_path and os.path.exists(current_path):
-        return
-
-    # If configured path doesn't exist, search in the specific directory
+    # PRIORITIZE searching in the specific search_dir (e.g., /app/gpt_weights)
     if os.path.exists(search_dir):
         for root, _, files in os.walk(search_dir):
             for file in files:
                 if any(file.endswith(ext) for ext in extensions):
                     found_path = os.path.join(root, file)
-                    print(f"Auto-detected model weight: {found_path}")
+                    print(f"Auto-detected custom model weight: {found_path}")
                     setattr(config_obj, config_path_attr, found_path)
                     return
+
+    # Fallback: check if the current path in config actually exists
+    current_path = getattr(config_obj, config_path_attr)
+    if current_path and os.path.exists(current_path):
+        return
     
-    # Check default pretrained models as fallback
+    # Second fallback: check default pretrained models
     pretrained_dir = "GPT_SoVITS/pretrained_models"
-    if os.path.exists(pretrained_dir) and (not current_path or not os.path.exists(current_path)):
+    if os.path.exists(pretrained_dir):
          for root, _, files in os.walk(pretrained_dir):
             for file in files:
                 if any(file.endswith(ext) for ext in extensions):
-                    # Prefer models that match specific patterns if needed, otherwise take first
-                    if "s1bert" in file and config_path_attr == "t2s_weights_path": # Basic filter for base GPT
+                    if "s1bert" in file and config_path_attr == "t2s_weights_path":
                          found_path = os.path.join(root, file)
                          setattr(config_obj, config_path_attr, found_path)
                          return
-                    if "s2G" in file and config_path_attr == "vits_weights_path": # Basic filter for base SoVITS
+                    if "s2G" in file and config_path_attr == "vits_weights_path":
                          found_path = os.path.join(root, file)
                          setattr(config_obj, config_path_attr, found_path)
                          return
@@ -394,6 +395,7 @@ def check_params(req: dict):
             base_path = os.path.splitext(ref_audio_path)[0]
             for ext in [".lab", ".txt"]:
                 text_path = base_path + ext
+                print(f"DEBUG: Checking for prompt file at {text_path}")
                 if os.path.exists(text_path):
                     try:
                         with open(text_path, "r", encoding="utf-8") as f:
@@ -403,6 +405,8 @@ def check_params(req: dict):
                             break
                     except Exception as e:
                         print(f"Failed to read prompt text from {text_path}: {e}")
+                else:
+                    print(f"DEBUG: File not found at {text_path}")
 
     if ref_audio_path in [None, ""]:
         return JSONResponse(status_code=400, content={"message": "ref_audio_path is required"})
