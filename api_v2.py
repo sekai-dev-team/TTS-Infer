@@ -371,22 +371,38 @@ def check_params(req: dict):
              pass
 
     # Auto-parse prompt_text and prompt_lang from filename if missing
-    if ref_audio_path and os.path.exists(ref_audio_path) and (not prompt_text or not prompt_lang):
-        filename = os.path.basename(ref_audio_path)
-        name_without_ext = os.path.splitext(filename)[0]
-        parts = name_without_ext.split("_")
-        if len(parts) >= 2:
-            auto_lang = parts[-1]
-            auto_text = "_".join(parts[:-1])
-            # Mapping common language codes if needed, or assume standard codes
-            if not prompt_lang:
-                prompt_lang = auto_lang
-                req["prompt_lang"] = prompt_lang
-                print(f"Auto-detected prompt_lang: {prompt_lang}")
-            if not prompt_text:
-                prompt_text = auto_text
-                req["prompt_text"] = prompt_text
-                print(f"Auto-detected prompt_text: {prompt_text}")
+    if ref_audio_path and os.path.exists(ref_audio_path):
+        if not prompt_text or not prompt_lang:
+            filename = os.path.basename(ref_audio_path)
+            name_without_ext = os.path.splitext(filename)[0]
+            parts = name_without_ext.split("_")
+            if len(parts) >= 2:
+                auto_lang = parts[-1]
+                auto_text = "_".join(parts[:-1])
+                # Mapping common language codes if needed, or assume standard codes
+                if not prompt_lang:
+                    prompt_lang = auto_lang
+                    req["prompt_lang"] = prompt_lang
+                    print(f"Auto-detected prompt_lang: {prompt_lang}")
+                if not prompt_text:
+                    prompt_text = auto_text
+                    req["prompt_text"] = prompt_text
+                    print(f"Auto-detected prompt_text: {prompt_text}")
+
+        # Try reading from .lab or .txt file if prompt_text is still missing
+        if not prompt_text:
+            base_path = os.path.splitext(ref_audio_path)[0]
+            for ext in [".lab", ".txt"]:
+                text_path = base_path + ext
+                if os.path.exists(text_path):
+                    try:
+                        with open(text_path, "r", encoding="utf-8") as f:
+                            prompt_text = f.read().strip()
+                            req["prompt_text"] = prompt_text
+                            print(f"Auto-detected prompt_text from {ext}: {prompt_text}")
+                            break
+                    except Exception as e:
+                        print(f"Failed to read prompt text from {text_path}: {e}")
 
     if ref_audio_path in [None, ""]:
         return JSONResponse(status_code=400, content={"message": "ref_audio_path is required"})
@@ -541,6 +557,8 @@ async def tts_handle(req: dict):
 
             return Response(audio_data, media_type=f"audio/{media_type}")
     except Exception as e:
+        print(f"TTS Failed with request: {req}")
+        traceback.print_exc()
         return JSONResponse(status_code=400, content={"message": "tts failed", "Exception": str(e)})
 
 
