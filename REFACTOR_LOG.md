@@ -50,4 +50,32 @@
   - A: 这些功能属于训练/预处理范畴，已在推理版中移除。如需使用，请在外部处理好音频后再作为参考音频传入。
 
 ---
-*重构时间: 2026年1月21日*
+
+## 7. 2026-01-22 调试与修复记录 (Docker & 兼容性)
+
+本次调试旨在解决容器化部署中的依赖地狱、模块缺失以及新旧硬件兼容性问题。
+
+### 7.1 依赖与构建修复
+- **依赖瘦身**: 修正 `requirements.txt`，移除 `torch` 和 `torchaudio`（利用基础镜像预装版本），防止重复安装导致的镜像体积膨胀（从 16GB 降至正常水平）。添加 `x_transformers` 缺失依赖。
+- **模块缺失补全**:
+    - 创建 `GPT_SoVITS/utils.py`: 解决 `torch.load` 加载权重时因缺少顶层 `utils` 模块而抛出的 `ModuleNotFoundError`。
+    - 创建 `GPT_SoVITS/module/distrib.py` 和 `ddp_utils.py`: 提供 `is_distributed` 和 `broadcast_tensors` 的伪实现，解决推理时对分布式训练代码的硬依赖。
+- **导入路径修复**: 修改 `GPT_SoVITS/feature_extractor/cnhubert.py`，注释掉顶层 `import utils` 和 `if __name__ == "__main__":` 块，防止库加载时报错。
+
+### 7.2 跨平台硬件兼容性 (JIT vs NVRTC)
+- **问题**: 在 RTX 5060 Ti (新架构) 上运行 CUDA 11.8 容器时，PyTorch 的 JIT 编译器 (`nvrtc`) 报错 `invalid value for --gpu-architecture`。
+- **原因**: 容器内的旧版 CUDA 工具链不支持新显卡架构的即时编译。
+- **解决方案**: 修改 `GPT_SoVITS/module/commons.py`，注释掉 `@torch.jit.script` 装饰器。
+- **效果**: 禁用 JIT 编译，回退到普通 Python/Torch 执行模式。这确保了代码既能在 RTX 50 系列新卡上运行（避开编译错误），也能在 GTX 1660 Ti 等老卡上运行（保持兼容），实现了真正的跨平台部署。
+
+### 7.3 开发与测试优化
+- **开发模式**: 更新 `docker-compose.yaml`，将宿主机根目录挂载到容器 `/app`，实现代码热重载，避免频繁重建镜像。
+- **测试脚本**: 增强 `tests/test_api.py`，将超时时间延长至 300秒，以适应首次推理时的模型加载与 JIT 预热（如有）。
+- **ONNXRuntime**: 确认 `onnxruntime-gpu` 因 CUDA 版本不匹配 (12 vs 11) 而回退到 CPU 模式，但不影响核心 TTS 功能的使用。
+
+### 7.4 部署注意事项
+- **模型挂载**: 必须在宿主机准备好 `GPT_SoVITS/pretrained_models/` 目录及相关模型文件（BERT, Hubert, SoVITS v4 底模），并正确挂载到容器。
+- **忽略规则**: 更新 `.gitignore` 防止意外提交预训练模型大文件。
+
+---
+*上次更新: 2026年1月22日*

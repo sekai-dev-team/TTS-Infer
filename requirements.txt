@@ -1,5 +1,5 @@
-torch
-torchaudio
+# torch - provided by base image
+# torchaudio - provided by base image
 numpy<2.0
 scipy
 fastapi[standard]>=0.115.2
@@ -24,3 +24,19 @@ transformers>=4.43,<=4.50
 sentencepiece
 PyYAML
 psutil
+torchmetrics
+matplotlib
+huggingface_hub
+ninja
+soundfile
+x_transformers
+# 新增依赖
+pytorch-lightning>=2.4
+funasr==1.0.27
+modelscope==1.10.0
+peft
+rotary_embedding_torch
+python_mecab_ko; sys_platform != 'win32'
+numba
+# 针对 Linux 服务器 (CUDA 11.8) 的优化版本，避免 CUDA 12 报错
+onnxruntime-gpu==1.16.3; sys_platform != 'win32' and (platform_machine == "x86_64" or platform_machine == "AMD64")

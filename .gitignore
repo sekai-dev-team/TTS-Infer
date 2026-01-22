@@ -1,3 +1,6 @@
+tests/
+
+GPT_SoVITS/pretrained_models/
 .DS_Store
 .vscode
 __pycache__

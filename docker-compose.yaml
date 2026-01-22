@@ -1,12 +1,11 @@
-version: '3.8'
-
 services:
-  TTS-Infer:
-    image: 007hikari/gpt-sovits-infer:latest
-    container_name: miku-voice-backend
-    restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
+  tts-infer:
+    build: 
+      context: .
+      args:
+        USE_MIRROR: "true"
+    image: tts-infer:latest
+    container_name: tts-infer
     ports:
       - "9880:9880"
     deploy:
@@ -17,28 +16,32 @@ services:
               count: 1
               capabilities: [gpu]
     volumes:
+      # 0. 开发模式核心：挂载当前目录代码到容器
+      # 这样修改 utils.py 或 api_v2.py 后只需重启容器即可生效
+      - .:/app
+      
+      # 下面的挂载现在大部分是冗余的（因为已经在 . 中了），除非需要重命名路径
+      
       # 1. 挂载基础预训练模型 (BERT 等)
-      # 宿主机路径应指向包含 cnhubert, bert 等模型的目录
-      - ./GPT_SoVITS/pretrained_models:/app/GPT_SoVITS/pretrained_models
+      # - ./GPT_SoVITS/pretrained_models:/app/GPT_SoVITS/pretrained_models
       
       # 2. 挂载微调后的模型
-      # 存放您的 .ckpt (GPT) 和 .pth (SoVITS) 文件
-      - ./gpt_weights:/app/gpt_weights
-      - ./sovits_weights:/app/sovits_weights
+      # - ./gpt_weights:/app/gpt_weights
+      # - ./sovits_weights:/app/sovits_weights
       
       # 3. 挂载参考音频 (Ref Audio)
-      # 存放 miku_ref.wav 等
+      # 注意：宿主机是 ref_audios (复数)，容器内映射为 ref_audio (单数)
+      # 这是一个重命名操作，所以必须保留，且会覆盖 .:/app 中的同名部分
       - ./ref_audios:/app/ref_audio
       
       # 4. 挂载配置文件 (可选)
-      # 如果需要覆盖默认配置，取消注释并确保文件存在
-      - ./configs/tts_infer.yaml:/app/GPT_SoVITS/configs/tts_infer.yaml
+      # - ./GPT_SoVITS/configs/tts_infer.yaml:/app/GPT_SoVITS/configs/tts_infer.yaml
     environment:
       # 如果需要调整显存分配策略，可在此添加 PyTorch 环境变量
       - CUDA_VISIBLE_DEVICES=0
-    networks:
-      - nginx_proxy
+#     networks:
+#       - nginx_proxy
 
-networks:
-  nginx_proxy:
-    external: true
+# networks:
+#   nginx_proxy:
+#     external: true
