@@ -148,6 +148,20 @@ import uuid
 import asyncio
 from contextlib import asynccontextmanager
 
+# --- NLTK Resource Check ---
+import nltk
+try:
+    nltk.data.find('taggers/averaged_perceptron_tagger_eng')
+except LookupError:
+    print("NLTK resource 'averaged_perceptron_tagger_eng' not found. Downloading...")
+    nltk.download('averaged_perceptron_tagger_eng')
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    print("NLTK resource 'punkt' not found. Downloading...")
+    nltk.download('punkt')
+# ---------------------------
+
 # print(sys.path)
 i18n = I18nAuto()
 cut_method_names = get_cut_method_names()

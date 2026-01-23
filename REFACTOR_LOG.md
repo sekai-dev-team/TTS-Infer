@@ -78,4 +78,47 @@
 - **忽略规则**: 更新 `.gitignore` 防止意外提交预训练模型大文件。
 
 ---
-*上次更新: 2026年1月22日*
+
+
+
+## 8. 2026-01-23 调试与修复记录 (NLTK 资源缺失)
+
+
+
+本次修复解决了在容器环境中处理英文文本时，由于缺少 NLTK 语料库导致的推理失败问题。
+
+
+
+### 8.1 NLTK 资源补齐
+
+- **问题**: 推理英文文本时报错 `LookupError: Resource averaged_perceptron_tagger_eng not found.`。
+
+- **原因**: 容器基础镜像未包含 NLTK 的词性标注（POS Tagger）和分词（Punkt）模型。
+
+- **解决方案**:
+
+    - **代码层修复**: 在 `api_v2.py` 的初始化阶段加入自动检测与下载逻辑：
+
+      ```python
+
+      import nltk
+
+      try:
+
+          nltk.data.find('taggers/averaged_perceptron_tagger_eng')
+
+      except LookupError:
+
+          nltk.download('averaged_perceptron_tagger_eng')
+
+      ```
+
+    - **镜像层修复**: 修改 `Dockerfile`，在构建过程中执行 `RUN python -m nltk.downloader averaged_perceptron_tagger_eng punkt`，确保镜像离线可用性。
+
+- **效果**: 解决了处理英文文本时的崩溃问题，提升了服务的健壮性。
+
+
+
+---
+
+*上次更新: 2026年1月23日*

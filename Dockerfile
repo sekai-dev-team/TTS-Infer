@@ -37,6 +37,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --no-binary opencc -r requirements.txt \
     && pip cache purge
 
+# 下载 NLTK 资源 (用于英文文本处理)
+RUN python -m nltk.downloader averaged_perceptron_tagger_eng punkt
+
 # 复制项目文件
 COPY . .
 
