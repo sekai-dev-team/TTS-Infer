@@ -37,7 +37,7 @@ POST:
     "speed_factor":1.0,           # float. control the speed of the synthesized audio.
     "fragment_interval":0.3,      # float. to control the interval of the audio fragment.
     "seed": -1,                   # int. random seed for reproducibility.
-    "parallel_infer": True,       # bool. whether to use parallel inference.
+    "parallel_infer": False,       # bool. whether to use parallel inference.
     "repetition_penalty": 1.35,   # float. repetition penalty for T2S model.
     "sample_steps": 32,           # int. number of sampling steps for VITS model V3.
     "super_sampling": False,      # bool. whether to use super-sampling for audio when using VITS model V3.
@@ -233,7 +233,7 @@ class TTS_Request(BaseModel):
     seed: int = -1
     media_type: str = "wav"
     streaming_mode: Union[bool, int] = False
-    parallel_infer: bool = True
+    parallel_infer: bool = False
     repetition_penalty: float = 1.35
     sample_steps: int = 32
     super_sampling: bool = False
@@ -500,7 +500,7 @@ async def tts_handle(req: dict):
                 "speed_factor":1.0,           # float. control the speed of the synthesized audio.
                 "fragment_interval":0.3,      # float. to control the interval of the audio fragment.
                 "seed": -1,                   # int. random seed for reproducibility.
-                "parallel_infer": True,       # bool. whether to use parallel inference.
+                "parallel_infer": False,       # bool. whether to use parallel inference.
                 "repetition_penalty": 1.35,   # float. repetition penalty for T2S model.
                 "sample_steps": 32,           # int. number of sampling steps for VITS model V3.
                 "super_sampling": False,      # bool. whether to use super-sampling for audio when using VITS model V3.
@@ -634,7 +634,7 @@ async def tts_get_endpoint(
     fragment_interval: float = 0.3,
     seed: int = -1,
     media_type: str = "wav",
-    parallel_infer: bool = True,
+    parallel_infer: bool = False,
     repetition_penalty: float = 1.35,
     sample_steps: int = 32,
     super_sampling: bool = False,

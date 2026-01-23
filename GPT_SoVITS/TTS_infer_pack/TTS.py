@@ -1030,7 +1030,7 @@ class TTS:
                     "speed_factor":1.0,           # float. control the speed of the synthesized audio.
                     "fragment_interval":0.3,      # float. to control the interval of the audio fragment.
                     "seed": -1,                   # int. random seed for reproducibility.
-                    "parallel_infer": True,       # bool. whether to use parallel inference.
+                    "parallel_infer": False,       # bool. whether to use parallel inference.
                     "repetition_penalty": 1.35,   # float. repetition penalty for T2S model.
                     "sample_steps": 32,           # int. number of sampling steps for VITS model V3.
                     "super_sampling": False,      # bool. whether to use super-sampling for audio when using VITS model V3.
@@ -1064,7 +1064,7 @@ class TTS:
         seed = inputs.get("seed", -1)
         seed = -1 if seed in ["", None] else seed
         actual_seed = set_seed(seed)
-        parallel_infer = inputs.get("parallel_infer", True)
+        parallel_infer = inputs.get("parallel_infer", False)
         repetition_penalty = inputs.get("repetition_penalty", 1.35)
         sample_steps = inputs.get("sample_steps", 32)
         super_sampling = inputs.get("super_sampling", False)
