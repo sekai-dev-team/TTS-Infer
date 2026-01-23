@@ -99,6 +99,23 @@ RESP:
 成功: 返回"success", http code 200
 失败: 返回包含错误信息的 json, http code 400
 
+### 切换TTS模型 (同时切换GPT和Sovits)
+
+endpoint: `/set_model`
+
+GET:
+```
+http://127.0.0.1:9880/set_model?gpt_path=gpt_weights/my_gpt.ckpt&sovits_path=sovits_weights/my_sovits.pth
+```
+或者通过名称自动寻找 (在权重目录下寻找同名文件):
+```
+http://127.0.0.1:9880/set_model?model_name=my_model
+```
+
+RESP:
+成功: 返回成功信息, http code 200
+失败: 返回包含错误信息的 json, http code 400
+
 """
 
 import os
@@ -124,6 +141,7 @@ from io import BytesIO
 from tools.i18n.i18n import I18nAuto
 from GPT_SoVITS.TTS_infer_pack.TTS import TTS, TTS_Config
 from GPT_SoVITS.TTS_infer_pack.text_segmentation_method import get_method_names as get_cut_method_names
+from GPT_SoVITS.text.LangSegmenter.langsegmenter import LangSegmenter
 from pydantic import BaseModel
 import threading
 import uuid
@@ -371,26 +389,9 @@ def check_params(req: dict):
              # Randomly pick one if empty? No, better error out or let logic below handle empty
              pass
 
-    # Auto-parse prompt_text and prompt_lang from filename if missing
+    # Auto-parse prompt_text and prompt_lang logic
     if ref_audio_path and os.path.exists(ref_audio_path):
-        if not prompt_text or not prompt_lang:
-            filename = os.path.basename(ref_audio_path)
-            name_without_ext = os.path.splitext(filename)[0]
-            parts = name_without_ext.split("_")
-            if len(parts) >= 2:
-                auto_lang = parts[-1]
-                auto_text = "_".join(parts[:-1])
-                # Mapping common language codes if needed, or assume standard codes
-                if not prompt_lang:
-                    prompt_lang = auto_lang
-                    req["prompt_lang"] = prompt_lang
-                    print(f"Auto-detected prompt_lang: {prompt_lang}")
-                if not prompt_text:
-                    prompt_text = auto_text
-                    req["prompt_text"] = prompt_text
-                    print(f"Auto-detected prompt_text: {prompt_text}")
-
-        # Try reading from .lab or .txt file if prompt_text is still missing
+        # 1. Try reading from .lab or .txt file FIRST
         if not prompt_text:
             base_path = os.path.splitext(ref_audio_path)[0]
             for ext in [".lab", ".txt"]:
@@ -408,13 +409,50 @@ def check_params(req: dict):
                 else:
                     print(f"DEBUG: File not found at {text_path}")
 
+        # 2. Fallback: Parse from filename if still missing
+        if not prompt_text or not prompt_lang:
+            filename = os.path.basename(ref_audio_path)
+            name_without_ext = os.path.splitext(filename)[0]
+            parts = name_without_ext.split("_")
+            if len(parts) >= 2:
+                auto_lang = parts[-1]
+                auto_text = "_".join(parts[:-1])
+                # Mapping common language codes if needed, or assume standard codes
+                if not prompt_lang:
+                    prompt_lang = auto_lang
+                    req["prompt_lang"] = prompt_lang
+                    print(f"Auto-detected prompt_lang: {prompt_lang}")
+                if not prompt_text:
+                    prompt_text = auto_text
+                    req["prompt_text"] = prompt_text
+                    print(f"Auto-detected prompt_text from filename: {prompt_text}")
+
     if ref_audio_path in [None, ""]:
         return JSONResponse(status_code=400, content={"message": "ref_audio_path is required"})
     if text in [None, ""]:
         return JSONResponse(status_code=400, content={"message": "text is required"})
-    if text_lang in [None, ""]:
-        return JSONResponse(status_code=400, content={"message": "text_lang is required"})
-    elif text_lang.lower() not in tts_config.languages:
+    
+    # Auto detect text language if set to auto or empty
+    if text_lang in [None, "", "auto"]:
+        try:
+            detected_langs = LangSegmenter.getTexts(text)
+            if detected_langs:
+                # Pick the most common lang or just the first one's lang? 
+                # For GSV, usually we pick the first segment's lang as the primary text_lang
+                # or use "auto" if the underlying pipeline supports it.
+                # Here we set it to the first detected language to satisfy the pipeline's requirement.
+                text_lang = detected_langs[0]['lang']
+                req["text_lang"] = text_lang
+                print(f"Auto-detected text_lang: {text_lang}")
+            else:
+                text_lang = "zh" # Fallback
+                req["text_lang"] = text_lang
+        except Exception as e:
+            print(f"Failed to auto-detect language: {e}")
+            text_lang = "zh"
+            req["text_lang"] = text_lang
+
+    if text_lang.lower() not in tts_config.languages:
         return JSONResponse(
             status_code=400,
             content={"message": f"text_lang: {text_lang} is not supported in version {tts_config.version}"},
@@ -553,6 +591,10 @@ async def tts_handle(req: dict):
         else:
             sr, audio_data = next(tts_generator)
             audio_data = pack_audio(BytesIO(), audio_data, sr, media_type).getvalue()
+            
+            # Explicitly close the generator to trigger the 'finally' block in TTS.run immediately,
+            # ensuring resources and VRAM are released.
+            tts_generator.close()
 
             save_path = os.path.join(output_folder, f"tts_{timestamp}_{unique_id}.{media_type}")
             with open(save_path, "wb") as f:
@@ -684,6 +726,44 @@ async def set_sovits_weights(weights_path: str = None):
     except Exception as e:
         return JSONResponse(status_code=400, content={"message": "change sovits weight failed", "Exception": str(e)})
     return JSONResponse(status_code=200, content={"message": "success"})
+
+
+@APP.get("/set_model")
+async def set_model(model_name: str = None, gpt_path: str = None, sovits_path: str = None):
+    try:
+        if model_name:
+            # 自动寻找同名模型
+            docker_gpt_dir = "/app/gpt_weights"
+            docker_sovits_dir = "/app/sovits_weights"
+            local_gpt_dir = "gpt_weights"
+            local_sovits_dir = "sovits_weights"
+            
+            gpt_dir = docker_gpt_dir if os.path.exists(docker_gpt_dir) else local_gpt_dir
+            sovits_dir = docker_sovits_dir if os.path.exists(docker_sovits_dir) else local_sovits_dir
+            
+            if not gpt_path:
+                for root, _, files in os.walk(gpt_dir):
+                    for file in files:
+                        if file.startswith(model_name) and file.endswith(".ckpt"):
+                            gpt_path = os.path.join(root, file)
+                            break
+                    if gpt_path: break
+            
+            if not sovits_path:
+                for root, _, files in os.walk(sovits_dir):
+                    for file in files:
+                        if file.startswith(model_name) and file.endswith(".pth"):
+                            sovits_path = os.path.join(root, file)
+                            break
+                    if sovits_path: break
+        
+        if not gpt_path or not sovits_path:
+            return JSONResponse(status_code=400, content={"message": "gpt_path and sovits_path (or model_name) are required"})
+        
+        tts_pipeline.init_gpt_sovits_weights(gpt_path, sovits_path)
+        return JSONResponse(status_code=200, content={"message": "success", "gpt_path": gpt_path, "sovits_path": sovits_path})
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"message": "set model failed", "Exception": str(e)})
 
 
 if __name__ == "__main__":

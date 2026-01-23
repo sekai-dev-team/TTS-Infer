@@ -1,5 +1,7 @@
 tests/
 
+TODO.md
+
 GPT_SoVITS/pretrained_models/
 .DS_Store
 .vscode

@@ -491,6 +491,10 @@ class TTS:
             self.bert_model = self.bert_model.half()
 
     def init_vits_weights(self, weights_path: str):
+        if self.vits_model is not None:
+            del self.vits_model
+            self.vits_model = None
+            self.empty_cache()
         self.configs.vits_weights_path = weights_path
         version, model_version, if_lora_v3 = get_sovits_version_from_path_fast(weights_path)
         if "Pro" in model_version:
@@ -592,6 +596,10 @@ class TTS:
 
 
     def init_t2s_weights(self, weights_path: str):
+        if self.t2s_model is not None:
+            del self.t2s_model
+            self.t2s_model = None
+            self.empty_cache()
         print(f"Loading Text2Semantic weights from {weights_path}")
         self.configs.t2s_weights_path = weights_path
         self.configs.save_configs()
@@ -611,6 +619,10 @@ class TTS:
         mute_emb = codebook[self.configs.mute_tokens[self.configs.version]].unsqueeze(0)
         sim_matrix = F.cosine_similarity(mute_emb.float(), codebook.float(), dim=-1)
         self.configs.mute_emb_sim_matrix = sim_matrix
+
+    def init_gpt_sovits_weights(self, gpt_path: str, sovits_path: str):
+        self.init_t2s_weights(gpt_path)
+        self.init_vits_weights(sovits_path)
 
     def init_vocoder(self, version: str):
         if version == "v3":

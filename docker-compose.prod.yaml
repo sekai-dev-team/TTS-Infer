@@ -1,0 +1,37 @@
+services:
+  tts-infer:
+    image: 007hikari/tts-infer:latest
+    container_name: tts-infer
+    restart: unless-stopped
+    # labels:
+    #   - "com.centurylinklabs.watchtower.enable=false"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      # 1. 挂载基础预训练模型 (BERT 等)
+      - ./pretrained_models:/app/GPT_SoVITS/pretrained_models
+      
+      # 2. 挂载微调后的模型
+      - ./gpt_weights:/app/gpt_weights
+      - ./sovits_weights:/app/sovits_weights
+      
+      # 3. 挂载参考音频 (Ref Audio)
+      - ./ref_audios:/app/ref_audio
+
+      # 4. 挂载配置和输出音频
+      - ./configs:/app/GPT_SoVITS/configs
+      - ./output:/app/output
+    environment:
+      # 如果需要调整显存分配策略，可在此添加 PyTorch 环境变量
+      - CUDA_VISIBLE_DEVICES=0
+    networks:
+      - nginx_proxy
+
+networks:
+  nginx_proxy:
+    external: true
