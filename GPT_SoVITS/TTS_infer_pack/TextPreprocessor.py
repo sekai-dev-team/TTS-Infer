@@ -1,8 +1,11 @@
 import os
 import sys
 import threading
+import logging
 
-from tqdm import tqdm
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.TextPreprocessor")
+# ---------------------
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -57,12 +60,12 @@ class TextPreprocessor:
         self.bert_lock = threading.RLock()
 
     def preprocess(self, text: str, lang: str, text_split_method: str, version: str = "v2") -> List[Dict]:
-        print(f"############ {i18n('切分文本')} ############")
+        logger.info(f"############ {i18n('切分文本')} ############")
         text = self.replace_consecutive_punctuation(text)
         texts = self.pre_seg_text(text, lang, text_split_method)
         result = []
-        print(f"############ {i18n('提取文本Bert特征')} ############")
-        for text in tqdm(texts):
+        logger.info(f"############ {i18n('提取文本Bert特征')} (共 {len(texts)} 段) ############")
+        for i, text in enumerate(texts):
             phones, bert_features, norm_text = self.segment_and_extract_feature_for_text(text, lang, version)
             if phones is None or norm_text == "":
                 continue
@@ -72,6 +75,8 @@ class TextPreprocessor:
                 "norm_text": norm_text,
             }
             result.append(res)
+            if (i + 1) % 5 == 0 or i + 1 == len(texts):
+                logger.info(f"文本特征提取进度: {i+1}/{len(texts)}")
         return result
 
     def pre_seg_text(self, text: str, lang: str, text_split_method: str):
@@ -80,8 +85,7 @@ class TextPreprocessor:
             return []
         if text[0] not in splits and len(get_first(text)) < 4:
             text = "。" + text if lang != "en" else "." + text
-        print(i18n("实际输入的目标文本:"))
-        print(text)
+        logger.info(f"{i18n('实际输入的目标文本')}: {text}")
 
         seg_method = get_seg_method(text_split_method)
         text = seg_method(text)
@@ -110,8 +114,7 @@ class TextPreprocessor:
             else:
                 texts.append(text)
 
-        print(i18n("实际输入的目标文本(切句后):"))
-        print(texts)
+        logger.info(f"{i18n('实际输入的目标文本(切句后)')}: {texts}")
         return texts
 
     def segment_and_extract_feature_for_text(

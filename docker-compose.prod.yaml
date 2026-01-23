@@ -26,6 +26,7 @@ services:
       # 4. 挂载配置和输出音频
       - ./configs:/app/GPT_SoVITS/configs
       - ./output:/app/output
+      - ./logs:/app/logs
     environment:
       # 如果需要调整显存分配策略，可在此添加 PyTorch 环境变量
       - CUDA_VISIBLE_DEVICES=0

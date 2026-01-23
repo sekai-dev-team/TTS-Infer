@@ -7,15 +7,19 @@
 import math
 import os
 import random
+import logging
 import torch
 import torch.utils.data
 import numpy as np
 import librosa
 from librosa.filters import mel as librosa_mel_fn
 import pathlib
-from tqdm import tqdm
 from typing import List, Tuple, Optional
 from .env import AttrDict
+
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.MelDataset")
+# ---------------------
 
 MAX_WAV_VALUE = 32767.0  # NOTE: 32768.0 -1 to prevent int16 overflow (results in popping sound in corner cases)
 
@@ -78,9 +82,9 @@ def mel_spectrogram(
         torch.Tensor: Mel spectrogram.
     """
     if torch.min(y) < -1.0:
-        print(f"[WARNING] Min value of input waveform signal is {torch.min(y)}")
+        logger.warning(f"Min value of input waveform signal is {torch.min(y)}")
     if torch.max(y) > 1.0:
-        print(f"[WARNING] Max value of input waveform signal is {torch.max(y)}")
+        logger.warning(f"Max value of input waveform signal is {torch.max(y)}")
 
     device = y.device
     key = f"{n_fft}_{num_mels}_{sampling_rate}_{hop_size}_{win_size}_{fmin}_{fmax}_{device}"
@@ -148,13 +152,13 @@ def get_dataset_filelist(a):
         training_files = [
             os.path.join(a.input_wavs_dir, x.split("|")[0] + ".wav") for x in fi.read().split("\n") if len(x) > 0
         ]
-        print(f"first training file: {training_files[0]}")
+        logger.info(f"first training file: {training_files[0]}")
 
     with open(a.input_validation_file, "r", encoding="utf-8") as fi:
         validation_files = [
             os.path.join(a.input_wavs_dir, x.split("|")[0] + ".wav") for x in fi.read().split("\n") if len(x) > 0
         ]
-        print(f"first validation file: {validation_files[0]}")
+        logger.info(f"first validation file: {validation_files[0]}")
 
     for i in range(len(a.list_input_unseen_validation_file)):
         with open(a.list_input_unseen_validation_file[i], "r", encoding="utf-8") as fi:
@@ -163,7 +167,7 @@ def get_dataset_filelist(a):
                 for x in fi.read().split("\n")
                 if len(x) > 0
             ]
-            print(f"first unseen {i}th validation fileset: {unseen_validation_files[0]}")
+            logger.info(f"first unseen {i}th validation fileset: {unseen_validation_files[0]}")
             list_unseen_validation_files.append(unseen_validation_files)
 
     return training_files, validation_files, list_unseen_validation_files
@@ -215,9 +219,11 @@ class MelDataset(torch.utils.data.Dataset):
         self.fine_tuning = fine_tuning
         self.base_mels_path = base_mels_path
 
-        print("[INFO] checking dataset integrity...")
-        for i in tqdm(range(len(self.audio_files))):
+        logger.info("checking dataset integrity...")
+        for i in range(len(self.audio_files)):
             assert os.path.exists(self.audio_files[i]), f"{self.audio_files[i]} not found"
+            if (i + 1) % 1000 == 0 or i + 1 == len(self.audio_files):
+                logger.info(f"Integrity check progress: {i+1}/{len(self.audio_files)}")
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, str, torch.Tensor]:
         try:
@@ -363,7 +369,7 @@ class MelDataset(torch.utils.data.Dataset):
             if self.fine_tuning:
                 raise e  # Terminate training if it is fine-tuning. The dataset should have been prepared properly.
             else:
-                print(f"[WARNING] Failed to load waveform, skipping! filename: {filename} Error: {e}")
+                logger.warning(f"Failed to load waveform, skipping! filename: {filename} Error: {e}")
                 return self[random.randrange(len(self))]
 
     def __len__(self):

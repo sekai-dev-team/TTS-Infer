@@ -123,6 +123,8 @@ import sys
 import traceback
 import time
 from typing import Generator, Union
+import logging
+from logging.handlers import TimedRotatingFileHandler
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -148,17 +150,43 @@ import uuid
 import asyncio
 from contextlib import asynccontextmanager
 
+# --- Logging Setup ---
+log_dir = "logs"
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "tts_infer.log")
+
+logger = logging.getLogger("TTS_Infer")
+logger.setLevel(logging.INFO)
+
+# Console Handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+logger.addHandler(console_handler)
+
+# File Handler (Daily Rotation)
+file_handler = TimedRotatingFileHandler(
+    log_file, when="midnight", interval=1, backupCount=30, encoding="utf-8"
+)
+file_handler.suffix = "%Y-%m-%d" # Suffix for rotated files: tts_infer.log.2025-01-23
+file_handler.setLevel(logging.INFO)
+file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(file_formatter)
+logger.addHandler(file_handler)
+# ---------------------
+
 # --- NLTK Resource Check ---
 import nltk
 try:
     nltk.data.find('taggers/averaged_perceptron_tagger_eng')
 except LookupError:
-    print("NLTK resource 'averaged_perceptron_tagger_eng' not found. Downloading...")
+    logger.warning("NLTK resource 'averaged_perceptron_tagger_eng' not found. Downloading...")
     nltk.download('averaged_perceptron_tagger_eng')
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
-    print("NLTK resource 'punkt' not found. Downloading...")
+    logger.warning("NLTK resource 'punkt' not found. Downloading...")
     nltk.download('punkt')
 # ---------------------------
 
@@ -190,7 +218,7 @@ def scan_and_update_model_path(config_path_attr, search_dir, extensions, config_
             for file in files:
                 if any(file.endswith(ext) for ext in extensions):
                     found_path = os.path.join(root, file)
-                    print(f"Auto-detected custom model weight: {found_path}")
+                    logger.info(f"Auto-detected custom model weight: {found_path}")
                     setattr(config_obj, config_path_attr, found_path)
                     return
 
@@ -224,7 +252,7 @@ local_sovits_dir = "sovits_weights"
 scan_and_update_model_path("t2s_weights_path", docker_gpt_dir if os.path.exists(docker_gpt_dir) else local_gpt_dir, [".ckpt"], tts_config)
 scan_and_update_model_path("vits_weights_path", docker_sovits_dir if os.path.exists(docker_sovits_dir) else local_sovits_dir, [".pth"], tts_config)
 
-print(tts_config)
+logger.info(tts_config)
 tts_pipeline = TTS(tts_config)
 
 tts_lock = None
@@ -301,12 +329,12 @@ def pack_ogg(io_buffer: BytesIO, data: np.ndarray, rate: int):
         pack_ogg_thread.join()
     except RuntimeError as e:
         # If changing the thread stack size is unsupported, a RuntimeError is raised.
-        print("RuntimeError: {}".format(e))
-        print("Changing the thread stack size is unsupported.")
+        logger.error("RuntimeError: {}".format(e))
+        logger.error("Changing the thread stack size is unsupported.")
     except ValueError as e:
         # If the specified stack size is invalid, a ValueError is raised and the stack size is unmodified.
-        print("ValueError: {}".format(e))
-        print("The specified stack size is invalid.")
+        logger.error("ValueError: {}".format(e))
+        logger.error("The specified stack size is invalid.")
 
     return io_buffer
 
@@ -420,18 +448,18 @@ def check_params(req: dict):
             base_path = os.path.splitext(ref_audio_path)[0]
             for ext in [".lab", ".txt"]:
                 text_path = base_path + ext
-                print(f"DEBUG: Checking for prompt file at {text_path}")
+                logger.debug(f"DEBUG: Checking for prompt file at {text_path}")
                 if os.path.exists(text_path):
                     try:
                         with open(text_path, "r", encoding="utf-8") as f:
                             prompt_text = f.read().strip()
                             req["prompt_text"] = prompt_text
-                            print(f"Auto-detected prompt_text from {ext}: {prompt_text}")
+                            logger.info(f"Auto-detected prompt_text from {ext}: {prompt_text}")
                             break
                     except Exception as e:
-                        print(f"Failed to read prompt text from {text_path}: {e}")
+                        logger.error(f"Failed to read prompt text from {text_path}: {e}")
                 else:
-                    print(f"DEBUG: File not found at {text_path}")
+                    logger.debug(f"DEBUG: File not found at {text_path}")
 
         # 2. Fallback: Parse from filename if still missing
         if not prompt_text or not prompt_lang:
@@ -445,11 +473,11 @@ def check_params(req: dict):
                 if not prompt_lang:
                     prompt_lang = auto_lang
                     req["prompt_lang"] = prompt_lang
-                    print(f"Auto-detected prompt_lang: {prompt_lang}")
+                    logger.info(f"Auto-detected prompt_lang: {prompt_lang}")
                 if not prompt_text:
                     prompt_text = auto_text
                     req["prompt_text"] = prompt_text
-                    print(f"Auto-detected prompt_text from filename: {prompt_text}")
+                    logger.info(f"Auto-detected prompt_text from filename: {prompt_text}")
 
     if ref_audio_path in [None, ""]:
         return JSONResponse(status_code=400, content={"message": "ref_audio_path is required"})
@@ -467,12 +495,12 @@ def check_params(req: dict):
                 # Here we set it to the first detected language to satisfy the pipeline's requirement.
                 text_lang = detected_langs[0]['lang']
                 req["text_lang"] = text_lang
-                print(f"Auto-detected text_lang: {text_lang}")
+                logger.info(f"Auto-detected text_lang: {text_lang}")
             else:
                 text_lang = "zh" # Fallback
                 req["text_lang"] = text_lang
         except Exception as e:
-            print(f"Failed to auto-detect language: {e}")
+            logger.error(f"Failed to auto-detect language: {e}")
             text_lang = "zh"
             req["text_lang"] = text_lang
 
@@ -568,7 +596,8 @@ async def tts_handle(req: dict):
     req["return_fragment"] = return_fragment
     req["fixed_length_chunk"] = fixed_length_chunk
 
-    print(f"{streaming_mode} {return_fragment} {fixed_length_chunk}")
+    logger.debug(f"{streaming_mode} {return_fragment} {fixed_length_chunk}")
+    logger.info(f"收到推理请求参数: {req}")
 
     streaming_mode = streaming_mode or return_fragment
 
@@ -582,20 +611,21 @@ async def tts_handle(req: dict):
         
         start_time = time.perf_counter()
         text_len = len(req.get("text", ""))
-        print(f"开始推理，文本长度: {text_len} 字符...")
+        logger.info(f"开始推理，文本长度: {text_len} 字符...")
 
         if streaming_mode:
             async def streaming_generator(req, media_type):
                 async with tts_lock:
                     tts_generator = tts_pipeline.run(req)
                     save_path = os.path.join(output_folder, f"tts_stream_{timestamp}_{unique_id}.{media_type if media_type != 'raw' else 'wav'}")
+                    logger.info(f"流式音频将保存至: {save_path}")
                     
                     with open(save_path, "wb") as f_save:
                         if_frist_chunk = True
                         for sr, chunk in tts_generator:
                             if if_frist_chunk:
                                 ttfc = time.perf_counter() - start_time
-                                print(f"首包延迟 (TTFC): {ttfc:.3f}s")
+                                logger.info(f"首包延迟 (TTFC): {ttfc:.3f}s")
                                 if media_type == "wav":
                                     header = wave_header_chunk(sample_rate=sr)
                                     f_save.write(header)
@@ -608,7 +638,7 @@ async def tts_handle(req: dict):
                             yield data
                     
                     total_time = time.perf_counter() - start_time
-                    print(f"流式推理结束。总耗时: {total_time:.3f}s, 速度: {text_len/total_time:.2f} 字符/秒")
+                    logger.info(f"流式推理结束。总耗时: {total_time:.3f}s, 速度: {text_len/total_time:.2f} 字符/秒")
 
             return StreamingResponse(
                 streaming_generator(req, media_type),
@@ -629,13 +659,13 @@ async def tts_handle(req: dict):
             save_path = os.path.join(output_folder, f"tts_{timestamp}_{unique_id}.{media_type}")
             with open(save_path, "wb") as f:
                 f.write(audio_data)
-            print(f"音频已保存至: {save_path}")
-            print(f"非流式推理结束。总耗时: {total_time:.3f}s, 速度: {text_len/total_time:.2f} 字符/秒")
+            logger.info(f"音频已保存至: {save_path}")
+            logger.info(f"非流式推理结束。总耗时: {total_time:.3f}s, 速度: {text_len/total_time:.2f} 字符/秒")
 
             return Response(audio_data, media_type=f"audio/{media_type}")
     except Exception as e:
-        print(f"TTS Failed with request: {req}")
-        traceback.print_exc()
+        logger.error(f"TTS Failed with request: {req}")
+        logger.error(traceback.format_exc())
         return JSONResponse(status_code=400, content={"message": "tts failed", "Exception": str(e)})
 
 

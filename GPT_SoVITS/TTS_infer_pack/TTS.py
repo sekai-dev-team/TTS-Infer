@@ -5,10 +5,14 @@ import random
 import sys
 import time
 import traceback
+import logging
 from copy import deepcopy
 
 import torchaudio
-from tqdm import tqdm
+
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.TTS")
+# ---------------------
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -1208,7 +1212,9 @@ class TTS:
             def make_batch(batch_texts):
                 batch_data = []
                 print(f"############ {i18n('提取文本Bert特征')} ############")
-                for text in tqdm(batch_texts):
+                for i, text in enumerate(batch_texts):
+                    if (i + 1) % 5 == 0 or i + 1 == len(batch_texts):
+                        logger.info(f"分段特征提取进度: {i+1}/{len(batch_texts)}")
                     phones, bert_features, norm_text = self.text_preprocessor.segment_and_extract_feature_for_text(
                         text, text_lang, self.configs.version
                     )

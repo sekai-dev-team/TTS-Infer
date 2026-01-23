@@ -32,6 +32,7 @@
 """Core vector quantization implementation."""
 
 import typing as tp
+import logging
 
 from einops import rearrange, repeat
 import torch
@@ -41,7 +42,10 @@ import torch.distributed as dist
 
 from module.distrib import broadcast_tensors, is_distributed
 from module.ddp_utils import SyncFunction
-from tqdm import tqdm
+
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.CoreVQ")
+# ---------------------
 
 
 def default(val: tp.Any, d: tp.Any) -> tp.Any:
@@ -83,8 +87,8 @@ def kmeans(samples, num_clusters: int, num_iters: int = 10, frames_to_use: int =
 
     means = sample_vectors(samples, num_clusters)
 
-    print("kmeans start ... ")
-    for _ in tqdm(range(num_iters)):
+    logger.info("kmeans start ... ")
+    for it in range(num_iters):
         # Store cluster assignments
         all_assignments = []
 
@@ -107,6 +111,8 @@ def kmeans(samples, num_clusters: int, num_iters: int = 10, frames_to_use: int =
                 new_means[i] = samples[mask].mean(dim=0)
 
         means = torch.where(zero_mask[:, None], means, new_means)
+        if (it + 1) % 5 == 0 or it + 1 == num_iters:
+            logger.info(f"K-means iteration {it + 1}/{num_iters}")
 
     return means, bins
 
