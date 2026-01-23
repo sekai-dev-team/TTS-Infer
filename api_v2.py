@@ -145,6 +145,8 @@ from GPT_SoVITS.text.LangSegmenter.langsegmenter import LangSegmenter
 from pydantic import BaseModel
 import threading
 import uuid
+import asyncio
+from contextlib import asynccontextmanager
 
 # print(sys.path)
 i18n = I18nAuto()
@@ -211,7 +213,15 @@ scan_and_update_model_path("vits_weights_path", docker_sovits_dir if os.path.exi
 print(tts_config)
 tts_pipeline = TTS(tts_config)
 
-APP = FastAPI()
+tts_lock = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global tts_lock
+    tts_lock = asyncio.Lock()
+    yield
+
+APP = FastAPI(lifespan=lifespan)
 
 
 class TTS_Request(BaseModel):
@@ -550,51 +560,48 @@ async def tts_handle(req: dict):
 
 
     try:
-        tts_generator = tts_pipeline.run(req)
-
         # Output directory and filename components
         output_folder = "output"
         os.makedirs(output_folder, exist_ok=True)
-        timestamp = int(time.time()) # Assuming time is imported by start of script, as it is in original
+        timestamp = int(time.time())
         unique_id = uuid.uuid4().hex[:6]
-        import time as time_module # Re-import locally to be safe if global import is missing in context, though file has 'import time'
+        import time as time_module
 
         if streaming_mode:
+            async def streaming_generator(req, media_type):
+                async with tts_lock:
+                    tts_generator = tts_pipeline.run(req)
+                    save_path = os.path.join(output_folder, f"tts_stream_{timestamp}_{unique_id}.{media_type if media_type != 'raw' else 'wav'}")
+                    print(f"Saving stream to {save_path}")
+                    
+                    with open(save_path, "wb") as f_save:
+                        if_frist_chunk = True
+                        for sr, chunk in tts_generator:
+                            if if_frist_chunk and media_type == "wav":
+                                header = wave_header_chunk(sample_rate=sr)
+                                f_save.write(header)
+                                yield header
+                                media_type = "raw"
+                                if_frist_chunk = False
+                            
+                            data = pack_audio(BytesIO(), chunk, sr, media_type).getvalue()
+                            f_save.write(data)
+                            yield data
 
-            def streaming_generator(tts_generator: Generator, media_type: str):
-                save_path = os.path.join(output_folder, f"tts_stream_{timestamp}_{unique_id}.{media_type if media_type != 'raw' else 'wav'}")
-                print(f"Saving stream to {save_path}")
-                
-                with open(save_path, "wb") as f_save:
-                    if_frist_chunk = True
-                    for sr, chunk in tts_generator:
-                        if if_frist_chunk and media_type == "wav":
-                            header = wave_header_chunk(sample_rate=sr)
-                            f_save.write(header)
-                            yield header
-                            media_type = "raw"
-                            if_frist_chunk = False
-                        
-                        data = pack_audio(BytesIO(), chunk, sr, media_type).getvalue()
-                        f_save.write(data)
-                        yield data
-
-            # _media_type = f"audio/{media_type}" if not (streaming_mode and media_type in ["wav", "raw"]) else f"audio/x-{media_type}"
             return StreamingResponse(
-                streaming_generator(
-                    tts_generator,
-                    media_type,
-                ),
+                streaming_generator(req, media_type),
                 media_type=f"audio/{media_type}",
             )
 
         else:
-            sr, audio_data = next(tts_generator)
-            audio_data = pack_audio(BytesIO(), audio_data, sr, media_type).getvalue()
-            
-            # Explicitly close the generator to trigger the 'finally' block in TTS.run immediately,
-            # ensuring resources and VRAM are released.
-            tts_generator.close()
+            async with tts_lock:
+                tts_generator = tts_pipeline.run(req)
+                sr, audio_data = next(tts_generator)
+                audio_data = pack_audio(BytesIO(), audio_data, sr, media_type).getvalue()
+                
+                # Explicitly close the generator to trigger the 'finally' block in TTS.run immediately,
+                # ensuring resources and VRAM are released.
+                tts_generator.close()
 
             save_path = os.path.join(output_folder, f"tts_{timestamp}_{unique_id}.{media_type}")
             with open(save_path, "wb") as f:
@@ -710,7 +717,8 @@ async def set_gpt_weights(weights_path: str = None):
     try:
         if weights_path in ["", None]:
             return JSONResponse(status_code=400, content={"message": "gpt weight path is required"})
-        tts_pipeline.init_t2s_weights(weights_path)
+        async with tts_lock:
+            tts_pipeline.init_t2s_weights(weights_path)
     except Exception as e:
         return JSONResponse(status_code=400, content={"message": "change gpt weight failed", "Exception": str(e)})
 
@@ -722,7 +730,8 @@ async def set_sovits_weights(weights_path: str = None):
     try:
         if weights_path in ["", None]:
             return JSONResponse(status_code=400, content={"message": "sovits weight path is required"})
-        tts_pipeline.init_vits_weights(weights_path)
+        async with tts_lock:
+            tts_pipeline.init_vits_weights(weights_path)
     except Exception as e:
         return JSONResponse(status_code=400, content={"message": "change sovits weight failed", "Exception": str(e)})
     return JSONResponse(status_code=200, content={"message": "success"})
@@ -760,7 +769,8 @@ async def set_model(model_name: str = None, gpt_path: str = None, sovits_path: s
         if not gpt_path or not sovits_path:
             return JSONResponse(status_code=400, content={"message": "gpt_path and sovits_path (or model_name) are required"})
         
-        tts_pipeline.init_gpt_sovits_weights(gpt_path, sovits_path)
+        async with tts_lock:
+            tts_pipeline.init_gpt_sovits_weights(gpt_path, sovits_path)
         return JSONResponse(status_code=200, content={"message": "success", "gpt_path": gpt_path, "sovits_path": sovits_path})
     except Exception as e:
         return JSONResponse(status_code=400, content={"message": "set model failed", "Exception": str(e)})
