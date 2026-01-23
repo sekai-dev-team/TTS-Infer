@@ -579,28 +579,36 @@ async def tts_handle(req: dict):
         os.makedirs(output_folder, exist_ok=True)
         timestamp = int(time.time())
         unique_id = uuid.uuid4().hex[:6]
-        import time as time_module
+        
+        start_time = time.perf_counter()
+        text_len = len(req.get("text", ""))
+        print(f"开始推理，文本长度: {text_len} 字符...")
 
         if streaming_mode:
             async def streaming_generator(req, media_type):
                 async with tts_lock:
                     tts_generator = tts_pipeline.run(req)
                     save_path = os.path.join(output_folder, f"tts_stream_{timestamp}_{unique_id}.{media_type if media_type != 'raw' else 'wav'}")
-                    print(f"Saving stream to {save_path}")
                     
                     with open(save_path, "wb") as f_save:
                         if_frist_chunk = True
                         for sr, chunk in tts_generator:
-                            if if_frist_chunk and media_type == "wav":
-                                header = wave_header_chunk(sample_rate=sr)
-                                f_save.write(header)
-                                yield header
-                                media_type = "raw"
+                            if if_frist_chunk:
+                                ttfc = time.perf_counter() - start_time
+                                print(f"首包延迟 (TTFC): {ttfc:.3f}s")
+                                if media_type == "wav":
+                                    header = wave_header_chunk(sample_rate=sr)
+                                    f_save.write(header)
+                                    yield header
+                                    media_type = "raw"
                                 if_frist_chunk = False
                             
                             data = pack_audio(BytesIO(), chunk, sr, media_type).getvalue()
                             f_save.write(data)
                             yield data
+                    
+                    total_time = time.perf_counter() - start_time
+                    print(f"流式推理结束。总耗时: {total_time:.3f}s, 速度: {text_len/total_time:.2f} 字符/秒")
 
             return StreamingResponse(
                 streaming_generator(req, media_type),
@@ -617,10 +625,12 @@ async def tts_handle(req: dict):
                 # ensuring resources and VRAM are released.
                 tts_generator.close()
 
+            total_time = time.perf_counter() - start_time
             save_path = os.path.join(output_folder, f"tts_{timestamp}_{unique_id}.{media_type}")
             with open(save_path, "wb") as f:
                 f.write(audio_data)
-            print(f"Audio saved to: {save_path}")
+            print(f"音频已保存至: {save_path}")
+            print(f"非流式推理结束。总耗时: {total_time:.3f}s, 速度: {text_len/total_time:.2f} 字符/秒")
 
             return Response(audio_data, media_type=f"audio/{media_type}")
     except Exception as e:
