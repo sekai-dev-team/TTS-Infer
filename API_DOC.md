@@ -36,6 +36,7 @@ python api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml
 | `top_k` | int | 否 | 15 | 采样参数 top_k |
 | `top_p` | float | 否 | 1.0 | 采样参数 top_p |
 | `temperature` | float | 否 | 1.0 | 采样温度 |
+| `parallel_infer` | bool | 否 | `false` | 是否开启并行推理。开启后可能加速，但会禁用部分功能(如分桶)。 |
 | `text_split_method` | string | 否 | `cut5` | 文本切分方法 (cut0-5) |
 | `batch_size` | int | 否 | 1 | 推理批大小 |
 

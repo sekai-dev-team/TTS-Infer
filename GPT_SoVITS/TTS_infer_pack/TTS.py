@@ -1069,6 +1069,9 @@ class TTS:
         seed = -1 if seed in ["", None] else seed
         actual_seed = set_seed(seed)
         parallel_infer = inputs.get("parallel_infer", False)
+        # Fix: Ensure parallel_infer is a boolean, handling string inputs like "False" or "false"
+        if isinstance(parallel_infer, str):
+            parallel_infer = parallel_infer.lower() == "true"
         repetition_penalty = inputs.get("repetition_penalty", 1.35)
         sample_steps = inputs.get("sample_steps", 32)
         super_sampling = inputs.get("super_sampling", False)
