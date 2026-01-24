@@ -2,6 +2,8 @@ tests/
 
 GEMINI.md
 TODO.md
+docker-compose.yaml
+pretrained_models/
 
 GPT_SoVITS/pretrained_models/
 .DS_Store

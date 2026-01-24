@@ -11,13 +11,14 @@ import librosa
 import numpy as np
 import torch
 
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.utils")
+# ---------------------
+
 logging.getLogger("numba").setLevel(logging.ERROR)
 logging.getLogger("matplotlib").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.ERROR)
 MATPLOTLIB_FLAG = False
-
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-logger = logging
 
 
 def load_checkpoint(checkpoint_path, model, optimizer=None, skip_optimizer=False):
@@ -36,21 +37,21 @@ def load_checkpoint(checkpoint_path, model, optimizer=None, skip_optimizer=False
     for k, v in state_dict.items():
         try:
             # assert "quantizer" not in k
-            # print("load", k)
+            # logger.debug("load", k)
             new_state_dict[k] = saved_state_dict[k]
             assert saved_state_dict[k].shape == v.shape, (
                 saved_state_dict[k].shape,
                 v.shape,
             )
         except:
-            traceback.print_exc()
-            print("error, %s is not in the checkpoint" % k)  # shape不对也会，比如text_embedding当cleaner修改时
+            logger.error(traceback.format_exc())
+            logger.error("error, %s is not in the checkpoint" % k)  # shape不对也会，比如text_embedding当cleaner修改时
             new_state_dict[k] = v
     if hasattr(model, "module"):
         model.module.load_state_dict(new_state_dict)
     else:
         model.load_state_dict(new_state_dict)
-    print("load ")
+    
     logger.info(
         "Loaded checkpoint '{}' (iteration {})".format(
             checkpoint_path,

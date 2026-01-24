@@ -2,6 +2,11 @@
 # reference: https://github.com/lifeiteng/vall-e
 import os
 import sys
+import logging
+
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.Text2SemanticLightningModule")
+# ---------------------
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -20,8 +25,8 @@ class Text2SemanticLightningModule(Module):
         self.model = Text2SemanticDecoder(config=config, top_k=self.top_k)
         pretrained_s1 = config.get("pretrained_s1")
         if pretrained_s1 and is_train:
-            # print(self.load_state_dict(torch.load(pretrained_s1,map_location="cpu")["state_dict"]))
-            print(
+            # logger.debug(self.load_state_dict(torch.load(pretrained_s1,map_location="cpu")["state_dict"]))
+            logger.info(
                 self.load_state_dict(
                     torch.load(
                         pretrained_s1,

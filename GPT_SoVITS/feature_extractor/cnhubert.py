@@ -6,6 +6,10 @@ tf_logging.set_verbosity_error()
 
 import logging
 
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.CNHubert")
+# ---------------------
+
 logging.getLogger("numba").setLevel(logging.WARNING)
 
 from transformers import (
@@ -103,4 +107,4 @@ if __name__ == "__main__":
     model = model
     wav_16k_tensor = wav_16k_tensor
     feats = get_content(model, wav_16k_tensor)
-    print(feats.shape)
+    logger.info(feats.shape)

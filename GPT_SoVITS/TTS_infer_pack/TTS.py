@@ -198,7 +198,7 @@ v4:
 def set_seed(seed: int):
     seed = int(seed)
     seed = seed if seed != -1 else random.randint(0, 2**32 - 1)
-    print(f"Set seed to {seed}")
+    logger.info(f"Set seed to {seed}")
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -309,7 +309,7 @@ class TTS_Config:
         if configs in ["", None]:
             if not os.path.exists(self.configs_path):
                 self.save_configs()
-                print(f"Create default config file at {self.configs_path}")
+                logger.info(f"Create default config file at {self.configs_path}")
             configs: dict = deepcopy(self.default_configs)
 
         if isinstance(configs, str):
@@ -324,12 +324,12 @@ class TTS_Config:
 
         self.device = self.configs.get("device", torch.device("cpu"))
         if "cuda" in str(self.device) and not torch.cuda.is_available():
-            print("Warning: CUDA is not available, set device to CPU.")
+            logger.warning("Warning: CUDA is not available, set device to CPU.")
             self.device = torch.device("cpu")
 
         self.is_half = self.configs.get("is_half", False)
         if str(self.device) == "cpu" and self.is_half:
-            print(f"Warning: Half precision is not supported on CPU, set is_half to False.")
+            logger.warning(f"Warning: Half precision is not supported on CPU, set is_half to False.")
             self.is_half = False
 
         version = self.configs.get("version", None)
@@ -345,16 +345,16 @@ class TTS_Config:
 
         if (self.t2s_weights_path in [None, ""]) or (not os.path.exists(self.t2s_weights_path)):
             self.t2s_weights_path = self.default_configs[version]["t2s_weights_path"]
-            print(f"fall back to default t2s_weights_path: {self.t2s_weights_path}")
+            logger.info(f"fall back to default t2s_weights_path: {self.t2s_weights_path}")
         if (self.vits_weights_path in [None, ""]) or (not os.path.exists(self.vits_weights_path)):
             self.vits_weights_path = self.default_configs[version]["vits_weights_path"]
-            print(f"fall back to default vits_weights_path: {self.vits_weights_path}")
+            logger.info(f"fall back to default vits_weights_path: {self.vits_weights_path}")
         if (self.bert_base_path in [None, ""]) or (not os.path.exists(self.bert_base_path)):
             self.bert_base_path = self.default_configs[version]["bert_base_path"]
-            print(f"fall back to default bert_base_path: {self.bert_base_path}")
+            logger.info(f"fall back to default bert_base_path: {self.bert_base_path}")
         if (self.cnhuhbert_base_path in [None, ""]) or (not os.path.exists(self.cnhuhbert_base_path)):
             self.cnhuhbert_base_path = self.default_configs[version]["cnhuhbert_base_path"]
-            print(f"fall back to default cnhuhbert_base_path: {self.cnhuhbert_base_path}")
+            logger.info(f"fall back to default cnhuhbert_base_path: {self.cnhuhbert_base_path}")
         self.update_configs()
 
         self.max_sec = None
@@ -371,7 +371,7 @@ class TTS_Config:
         if os.path.exists(configs_path):
             ...
         else:
-            print(i18n("路径不存在,使用默认配置"))
+            logger.info(i18n("路径不存在,使用默认配置"))
             self.save_configs(configs_path)
         with open(configs_path, "r", encoding="utf-8") as f:
             configs = yaml.load(f, Loader=yaml.FullLoader)
@@ -478,7 +478,7 @@ class TTS:
         # self.enable_half_precision(self.configs.is_half)
 
     def init_cnhuhbert_weights(self, base_path: str):
-        print(f"Loading CNHuBERT weights from {base_path}")
+        logger.info(f"Loading CNHuBERT weights from {base_path}")
         self.cnhuhbert_model = CNHubert(base_path)
         self.cnhuhbert_model = self.cnhuhbert_model.eval()
         self.cnhuhbert_model = self.cnhuhbert_model.to(self.configs.device)
@@ -486,7 +486,7 @@ class TTS:
             self.cnhuhbert_model = self.cnhuhbert_model.half()
 
     def init_bert_weights(self, base_path: str):
-        print(f"Loading BERT weights from {base_path}")
+        logger.info(f"Loading BERT weights from {base_path}")
         self.bert_tokenizer = AutoTokenizer.from_pretrained(base_path)
         self.bert_model = AutoModelForMaskedLM.from_pretrained(base_path)
         self.bert_model = self.bert_model.eval()
@@ -567,11 +567,11 @@ class TTS:
         self.is_v2pro = model_version in {"v2Pro", "v2ProPlus"}
 
         if if_lora_v3 == False:
-            print(
+            logger.info(
                 f"Loading VITS weights from {weights_path}. {vits_model.load_state_dict(dict_s2['weight'], strict=False)}"
             )
         else:
-            print(
+            logger.info(
                 f"Loading VITS pretrained weights from {weights_path}. {vits_model.load_state_dict(load_sovits_new(path_sovits)['weight'], strict=False)}"
             )
             lora_rank = dict_s2["lora_rank"]
@@ -582,7 +582,7 @@ class TTS:
                 init_lora_weights=True,
             )
             vits_model.cfm = get_peft_model(vits_model.cfm, lora_config)
-            print(
+            logger.info(
                 f"Loading LoRA weights from {weights_path}. {vits_model.load_state_dict(dict_s2['weight'], strict=False)}"
             )
 
@@ -604,7 +604,7 @@ class TTS:
             del self.t2s_model
             self.t2s_model = None
             self.empty_cache()
-        print(f"Loading Text2Semantic weights from {weights_path}")
+        logger.info(f"Loading Text2Semantic weights from {weights_path}")
         self.configs.t2s_weights_path = weights_path
         self.configs.save_configs()
         self.configs.hz = 50
@@ -675,7 +675,7 @@ class TTS:
                 map_location="cpu",
                 weights_only=False,
             )
-            print("loading vocoder", self.vocoder.load_state_dict(state_dict_g))
+            logger.info(f"loading vocoder {self.vocoder.load_state_dict(state_dict_g)}")
 
             self.vocoder_configs["sr"] = 48000
             self.vocoder_configs["T_ref"] = 500
@@ -696,7 +696,7 @@ class TTS:
             self.sr_model: AP_BWE = AP_BWE(self.configs.device, DictToAttrRecursive)
             self.sr_model_not_exist = False
         except FileNotFoundError:
-            print(i18n("你没有下载超分模型的参数，因此不进行超分。如想超分请先参照教程把文件下载好"))
+            logger.warning(i18n("你没有下载超分模型的参数，因此不进行超分。如想超分请先参照教程把文件下载好"))
             self.sr_model_not_exist = True
 
     def init_sv_model(self):
@@ -712,7 +712,7 @@ class TTS:
 
         """
         if str(self.configs.device) == "cpu" and enable:
-            print("Half precision is not supported on CPU.")
+            logger.warning("Half precision is not supported on CPU.")
             return
 
         self.configs.is_half = enable
@@ -1082,13 +1082,13 @@ class TTS:
         chunk_split_thershold = 0.0 # 该值代表语义token与mute token的余弦相似度阈值，若大于该阈值，则视为可切分点。
 
         if parallel_infer and not streaming_mode:
-            print(i18n("并行推理模式已开启"))
+            logger.info(i18n("并行推理模式已开启"))
             self.t2s_model.model.infer_panel = self.t2s_model.model.infer_panel_batch_infer
         elif not parallel_infer and streaming_mode and not self.configs.use_vocoder:
-            print(i18n("流式推理模式已开启"))
+            logger.info(i18n("流式推理模式已开启"))
             self.t2s_model.model.infer_panel = self.t2s_model.model.infer_panel_naive
         elif streaming_mode and self.configs.use_vocoder:
-            print(i18n("SoVits V3/4模型不支持流式推理模式，已自动回退到分段返回模式"))
+            logger.warning(i18n("SoVits V3/4模型不支持流式推理模式，已自动回退到分段返回模式"))
             streaming_mode = False
             return_fragment = True
             if parallel_infer:
@@ -1097,32 +1097,32 @@ class TTS:
                 self.t2s_model.model.infer_panel = self.t2s_model.model.infer_panel_naive_batched
             # self.t2s_model.model.infer_panel = self.t2s_model.model.infer_panel_naive
         elif parallel_infer and streaming_mode:
-            print(i18n("不支持同时开启并行推理和流式推理模式，已自动关闭并行推理模式"))
+            logger.warning(i18n("不支持同时开启并行推理和流式推理模式，已自动关闭并行推理模式"))
             parallel_infer = False
             self.t2s_model.model.infer_panel = self.t2s_model.model.infer_panel_naive
         else:
-            print(i18n("朴素推理模式已开启"))
+            logger.info(i18n("朴素推理模式已开启"))
             self.t2s_model.model.infer_panel = self.t2s_model.model.infer_panel_naive_batched
 
         if return_fragment and streaming_mode:
-            print(i18n("流式推理模式不支持分段返回，已自动关闭分段返回"))
+            logger.warning(i18n("流式推理模式不支持分段返回，已自动关闭分段返回"))
             return_fragment = False
 
         if (return_fragment or streaming_mode) and split_bucket:
-            print(i18n("分段返回模式/流式推理模式不支持分桶处理，已自动关闭分桶处理"))
+            logger.warning(i18n("分段返回模式/流式推理模式不支持分桶处理，已自动关闭分桶处理"))
             split_bucket = False
 
 
         if split_bucket and speed_factor == 1.0 and not (self.configs.use_vocoder and parallel_infer):
-            print(i18n("分桶处理模式已开启"))
+            logger.info(i18n("分桶处理模式已开启"))
         elif speed_factor != 1.0:
-            print(i18n("语速调节不支持分桶处理，已自动关闭分桶处理"))
+            logger.warning(i18n("语速调节不支持分桶处理，已自动关闭分桶处理"))
             split_bucket = False
         elif self.configs.use_vocoder and parallel_infer:
-            print(i18n("当开启并行推理模式时，SoVits V3/4模型不支持分桶处理，已自动关闭分桶处理"))
+            logger.warning(i18n("当开启并行推理模式时，SoVits V3/4模型不支持分桶处理，已自动关闭分桶处理"))
             split_bucket = False
         else:
-            print(i18n("分桶处理模式已关闭"))
+            logger.info(i18n("分桶处理模式已关闭"))
 
         # if fragment_interval < 0.01:
         #     fragment_interval = 0.01
@@ -1165,7 +1165,7 @@ class TTS:
                 if path in [None, ""]:
                     continue
                 if not os.path.exists(path):
-                    print(i18n("音频文件不存在，跳过："), path)
+                    logger.warning(f"{i18n('音频文件不存在，跳过：')} {path}")
                     continue
                 self.prompt_cache["refer_spec"].append(self._get_ref_spec(path))
 
@@ -1173,7 +1173,7 @@ class TTS:
             prompt_text = prompt_text.strip("\n")
             if prompt_text[-1] not in splits:
                 prompt_text += "。" if prompt_lang != "en" else "."
-            print(i18n("实际输入的参考文本:"), prompt_text)
+            logger.info(f"{i18n('实际输入的参考文本:')} {prompt_text}")
             if self.prompt_cache["prompt_text"] != prompt_text:
                 phones, bert_features, norm_text = self.text_preprocessor.segment_and_extract_feature_for_text(
                     prompt_text, prompt_lang, self.configs.version
@@ -1204,7 +1204,7 @@ class TTS:
                 precision=self.precision,
             )
         else:
-            print(f"############ {i18n('切分文本')} ############")
+            logger.info(f"############ {i18n('切分文本')} ############")
             texts = self.text_preprocessor.pre_seg_text(text, text_lang, text_split_method)
             data = []
             for i in range(len(texts)):
@@ -1214,7 +1214,7 @@ class TTS:
 
             def make_batch(batch_texts):
                 batch_data = []
-                print(f"############ {i18n('提取文本Bert特征')} ############")
+                logger.info(f"############ {i18n('提取文本Bert特征')} ############")
                 for i, text in enumerate(batch_texts):
                     if (i + 1) % 5 == 0 or i + 1 == len(batch_texts):
                         logger.info(f"分段特征提取进度: {i+1}/{len(batch_texts)}")
@@ -1244,7 +1244,7 @@ class TTS:
 
         t2 = time.perf_counter()
         try:
-            print("############ 推理 ############")
+            logger.info("############ 推理 ############")
             ###### inference ######
             t_34 = 0.0
             t_45 = 0.0
@@ -1267,7 +1267,7 @@ class TTS:
                 norm_text: str = item["norm_text"]
                 max_len = item["max_len"]
 
-                print(i18n("前端处理后的文本(每句):"), norm_text)
+                logger.info(f"{i18n('前端处理后的文本(每句):')} {norm_text}")
                 if no_prompt_text:
                     prompt = None
                 else:
@@ -1285,7 +1285,7 @@ class TTS:
                         sv_emb.append(self.sv_model.compute_embedding3(audio_tensor))
 
                 if not streaming_mode:
-                    print(f"############ {i18n('预测语义Token')} ############")
+                    logger.info(f"############ {i18n('预测语义Token')} ############")
                     pred_semantic_list, idx_list = self.t2s_model.model.infer_panel(
                         all_phoneme_ids,
                         all_phoneme_lens,
@@ -1317,10 +1317,10 @@ class TTS:
                     # batch_audio_fragment = (self.vits_model.batched_decode(
                     #         pred_semantic, pred_semantic_len, batch_phones, batch_phones_len,refer_audio_spec
                     #     ))
-                    print(f"############ {i18n('合成音频')} ############")
+                    logger.info(f"############ {i18n('合成音频')} ############")
                     if not self.configs.use_vocoder:
                         if speed_factor == 1.0:
-                            print(f"{i18n('并行合成中')}...")
+                            logger.info(f"{i18n('并行合成中')}...")
                             # ## vits并行推理 method 2
                             pred_semantic_list = [item[-idx:] for item, idx in zip(pred_semantic_list, idx_list)]
                             upsample_rate = math.prod(self.vits_model.upsample_rates)
@@ -1345,7 +1345,8 @@ class TTS:
                             ]
                         else:
                             # ## vits串行推理
-                            for i, idx in enumerate(tqdm(idx_list)):
+                            for i, idx in enumerate(idx_list):
+                                logger.info(f"{i18n('进度')}: {i+1}/{len(idx_list)}")
                                 phones = batch_phones[i].unsqueeze(0).to(self.configs.device)
                                 _pred_semantic = (
                                     pred_semantic_list[i][-idx:].unsqueeze(0).unsqueeze(0)
@@ -1356,13 +1357,14 @@ class TTS:
                                 batch_audio_fragment.append(audio_fragment)  ###试试重建不带上prompt部分
                     else:
                         if parallel_infer:
-                            print(f"{i18n('并行合成中')}...")
+                            logger.info(f"{i18n('并行合成中')}...")
                             audio_fragments = self.using_vocoder_synthesis_batched_infer(
                                 idx_list, pred_semantic_list, batch_phones, speed=speed_factor, sample_steps=sample_steps
                             )
                             batch_audio_fragment.extend(audio_fragments)
                         else:
-                            for i, idx in enumerate(tqdm(idx_list)):
+                            for i, idx in enumerate(idx_list):
+                                logger.info(f"{i18n('进度')}: {i+1}/{len(idx_list)}")
                                 phones = batch_phones[i].unsqueeze(0).to(self.configs.device)
                                 _pred_semantic = (
                                     pred_semantic_list[i][-idx:].unsqueeze(0).unsqueeze(0)
@@ -1429,7 +1431,7 @@ class TTS:
                             break
 
                         _semantic_tokens = semantic_tokens
-                        print(f"semantic_tokens shape:{semantic_tokens.shape}")
+                        logger.debug(f"semantic_tokens shape:{semantic_tokens.shape}")
 
                         previous_tokens.append(semantic_tokens)
 
@@ -1492,7 +1494,7 @@ class TTS:
                             )
                         
                         if is_first_package: 
-                            print(f"first_package_delay: {time.perf_counter()-t0:.3f}")
+                            logger.info(f"first_package_delay: {time.perf_counter()-t0:.3f}")
                             is_first_package = False
 
 
@@ -1501,7 +1503,7 @@ class TTS:
                 t5 = time.perf_counter()
                 t_45 += t5 - t4
                 if return_fragment:
-                    print("%.3f\t%.3f\t%.3f\t%.3f" % (t1 - t0, t2 - t1, t4 - t3, t5 - t4))
+                    logger.info("%.3f\t%.3f\t%.3f\t%.3f" % (t1 - t0, t2 - t1, t4 - t3, t5 - t4))
                     yield self.audio_postprocess(
                         [batch_audio_fragment],
                         output_sr,
@@ -1520,7 +1522,7 @@ class TTS:
                     return
 
             if not (return_fragment or streaming_mode):
-                print("%.3f\t%.3f\t%.3f\t%.3f" % (t1 - t0, t2 - t1, t_34, t_45))
+                logger.info("%.3f\t%.3f\t%.3f\t%.3f" % (t1 - t0, t2 - t1, t_34, t_45))
                 if len(audio) == 0:
                     yield output_sr, np.zeros(int(output_sr), dtype=np.int16)
                     return
@@ -1591,7 +1593,7 @@ class TTS:
         audio = torch.cat(audio, dim=0)
 
         if super_sampling:
-            print(f"############ {i18n('音频超采样')} ############")
+            logger.info(f"############ {i18n('音频超采样')} ############")
             t1 = time.perf_counter()
             self.init_sr_model()
             if not self.sr_model_not_exist:
@@ -1601,7 +1603,7 @@ class TTS:
                     audio /= max_audio
             audio = (audio * 32768).astype(np.int16)
             t2 = time.perf_counter()
-            print(f"超采样用时：{t2 - t1:.3f}s")
+            logger.info(f"超采样用时：{t2 - t1:.3f}s")
         else:
             # audio = audio.float() * 32768
             # audio = audio.to(dtype=torch.int16).clamp(-32768, 32767).cpu().numpy()
@@ -1615,7 +1617,7 @@ class TTS:
         #     if speed_factor != 1.0:
         #         audio = speed_change(audio, speed=speed_factor, sr=int(sr))
         # except Exception as e:
-        #     print(f"Failed to change speed of audio: \n{e}")
+        #     logger.error(f"Failed to change speed of audio: \n{e}")
 
         return sr, audio
 
@@ -1821,7 +1823,7 @@ class TTS:
             corr_den = F.conv1d(w2.view(1, 1, -1)**2, torch.ones_like(w1).view(1, 1, -1)).view(-1)+ 1e-8
             idx = (corr_norm/corr_den.sqrt()).argmax()
 
-            print(f"seg_idx: {idx}")
+            logger.debug(f"seg_idx: {idx}")
 
             # idx = corr.argmax()
             f1_ = f1[: -overlap_len]

@@ -1,17 +1,21 @@
 import warnings
 
 warnings.filterwarnings("ignore")
+import logging
 import math
-
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+# --- Logging Setup ---
+logger = logging.getLogger("TTS_Infer.models")
+# ---------------------
+
+from module import attentions
 from module import commons
 from module import modules
-from module import attentions
-from f5_tts.model import DiT
-from torch.nn import Conv1d, ConvTranspose1d, Conv2d
+
+from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from module.commons import init_weights, get_padding
 from module.mrte_model import MRTE

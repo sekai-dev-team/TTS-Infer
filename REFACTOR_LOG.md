@@ -117,8 +117,44 @@
 
 - **效果**: 解决了处理英文文本时的崩溃问题，提升了服务的健壮性。
 
+---
 
+## 9. 统一日志系统重构 (Logging System Refactor) - 2026-01-24
+
+### 变更背景 (Background)
+- 项目中存在大量散落在各处的 `print` 语句，导致 Docker 日志难以管理且缺乏时间戳。
+- 隐式依赖 `tqdm` 在某些环境下导致 `NameError: name 'tqdm' is not defined`。
+- 多处重复初始化日志配置（如 `logging.basicConfig`）导致控制台输出重复。
+
+### 主要变更 (Changes)
+1. **统一日志工具 (`tools/logger.py`)**:
+   - 实现了 `setup_logging` 函数，支持同时输出到控制台和文件。
+   - 文件日志使用 `TimedRotatingFileHandler`，每日滚动，保留 30 天。
+   - 设置 `propagate = False` 以防止在 FastAPI/Uvicorn 环境下出现重复日志。
+   - 日志格式包含时间戳、级别、模块名和消息。
+
+2. **核心逻辑重构 (`GPT_SoVITS/TTS_infer_pack/TTS.py`)**:
+   - 彻底移除 `tqdm` 依赖，改为基于步长的手动 `logger.info` 进度报告。
+   - 将超过 50 处 `print` 替换为 `logger.info`, `logger.debug` 或 `logger.warning`。
+   - 优化了并行推理和流式推理的模式提示日志。
+
+3. **API 入口适配 (`api_v2.py`)**:
+   - 集成 `tools.logger.setup_logging`。
+   - 移除手动日志配置代码。
+   - 增加了请求处理的关键节点日志（TTFC、总耗时、保存路径等）。
+
+4. **辅助模块清理**:
+   - `GPT_SoVITS/utils.py`: 移除 `logging.basicConfig`，改用具名 logger。
+   - `GPT_SoVITS/TTS_infer_pack/TextPreprocessor.py`: 确保使用具名 logger 且无冗余 print。
+   - `GPT_SoVITS/AR/models/t2s_lightning_module.py`: 替换权重加载时的 print。
+   - `GPT_SoVITS/module/models.py`: 替换权重清理和准确率统计的 print。
+
+### 验证 (Verification)
+- [x] 无 `print` 暴露在生产代码路径。
+- [x] `logs/tts_infer.log` 正常生成并记录。
+- [x] 控制台日志格式统一，无重复输出。
+- [x] 移除 `tqdm` 后推理流程依然清晰可见。
 
 ---
 
-*上次更新: 2026年1月23日*
+*上次更新: 2026年1月24日*

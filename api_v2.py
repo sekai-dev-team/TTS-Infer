@@ -149,31 +149,10 @@ import threading
 import uuid
 import asyncio
 from contextlib import asynccontextmanager
+from tools.logger import setup_logging
 
 # --- Logging Setup ---
-log_dir = "logs"
-os.makedirs(log_dir, exist_ok=True)
-log_file = os.path.join(log_dir, "tts_infer.log")
-
-logger = logging.getLogger("TTS_Infer")
-logger.setLevel(logging.INFO)
-
-# Console Handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(console_formatter)
-logger.addHandler(console_handler)
-
-# File Handler (Daily Rotation)
-file_handler = TimedRotatingFileHandler(
-    log_file, when="midnight", interval=1, backupCount=30, encoding="utf-8"
-)
-file_handler.suffix = "%Y-%m-%d" # Suffix for rotated files: tts_infer.log.2025-01-23
-file_handler.setLevel(logging.INFO)
-file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(file_formatter)
-logger.addHandler(file_handler)
+logger = setup_logging(name="TTS_Infer")
 # ---------------------
 
 # --- NLTK Resource Check ---
@@ -448,7 +427,7 @@ def check_params(req: dict):
             base_path = os.path.splitext(ref_audio_path)[0]
             for ext in [".lab", ".txt"]:
                 text_path = base_path + ext
-                logger.debug(f"DEBUG: Checking for prompt file at {text_path}")
+                logger.debug(f"Checking for prompt file at {text_path}")
                 if os.path.exists(text_path):
                     try:
                         with open(text_path, "r", encoding="utf-8") as f:
